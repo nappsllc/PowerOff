@@ -1,1 +1,9 @@
+# build outputs
+*.obj
+*.exe
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.res
 /target/
