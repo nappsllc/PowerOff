@@ -1,0 +1,2 @@
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/OPT:REF", "-C", "link-arg=/OPT:ICF", "-C", "link-arg=/ALIGN:512"]
