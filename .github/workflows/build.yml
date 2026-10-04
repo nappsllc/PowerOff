@@ -1,0 +1,55 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # attach files to the release on tag pushes
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Build poweroff.exe
+        shell: cmd
+        run: build.bat
+
+      - name: Smoke test CLI
+        shell: pwsh
+        run: |
+          $out = & .\poweroff.exe --help | Out-String
+          if ($out -notmatch 'PowerOff') { throw "unexpected --help output: $out" }
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $nsis = "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          if (-not (Test-Path $nsis)) { choco install nsis -y --no-progress; if ($LASTEXITCODE) { exit 1 } }
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME.TrimStart('v') } else { '1.0.0' }
+          & $nsis /V2 /DVERSION=$version installer\poweroff.nsi
+          if ($LASTEXITCODE) { exit 1 }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PowerOff
+          path: |
+            poweroff.exe
+            PowerOff-setup.exe
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            poweroff.exe
+            PowerOff-setup.exe
