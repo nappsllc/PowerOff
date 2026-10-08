@@ -5,8 +5,8 @@ Paste everything below the line into the UI AI builder.
 ---
 
 You are designing the main window of **PowerOff**, a tiny Windows 11 desktop
-utility that shuts down / restarts / sleeps the PC on a schedule (a Wise Auto
-Shutdown clone). Deliverable: a **single self-contained HTML file** that is a
+utility that shuts down / restarts / sleeps the PC on a schedule. Deliverable: a
+**single self-contained HTML file** that is a
 pixel-faithful, interactive mockup of the window, in both light and dark mode
 (add a light/dark toggle at the top of the mockup page, outside the window).
 

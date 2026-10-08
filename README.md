@@ -4,10 +4,10 @@
 like it shipped with Windows 11, weighs ~160 KB and, once you close it,
 uses no memory at all.**
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
-  <img src="docs/screenshot-light.png" width="656" alt="PowerNapps PowerOff: Sleep at 11:00 PM every day, scheduled, with Wake up at 7:00 AM">
-</picture>
+<p>
+  <img src="docs/screenshot-light.png" width="49%" alt="PowerNapps PowerOff, light theme: Sleep at 11:00 PM every day, scheduled, with Wake up at 7:00 AM">
+  <img src="docs/screenshot-dark.png" width="49%" alt="PowerNapps PowerOff, dark theme">
+</p>
 
 - 🪶 **The only power-off app that eats 0 MB of RAM** (with Tray icon
   Off) — because it doesn't have to ;) Windows Task Scheduler does the
@@ -20,7 +20,6 @@ uses no memory at all.**
   timers Windows Update uses.
 - ⚡ **Highly optimized, tiny, zero dependencies.** One ~160 KB exe in
   plain C. No .NET, no Electron, no VC++ Redistributable, no runtime.
-  Wise Auto Shutdown ships ~3.17 MB for the same job.
 - 🎨 **Designed as an extension of Windows Settings**, on purpose — same
   cards, toggles, flyouts, fonts and spacing as the real Settings app,
   with one twist: full-color Fluent icons.
