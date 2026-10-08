@@ -259,6 +259,22 @@ Assets: `icons/svg/` holds the design's Fluent color icons;
 `tools/optimize-png.py` then squeezes them losslessly (`python tools/optimize-png.py icons/*.png poweroff.ico`).
 The generated files are committed, so builds don't need Edge.
 
+### Testing
+
+`tests/sandbox/` runs end-to-end checks in a fresh Windows Sandbox (needs the
+Windows Sandbox feature): install and uninstall, the window, keyboard, Narrator
+names, 150% scaling, Task Scheduler staying in sync, a real 5-minute countdown
+with the reminder and snooze, a time picked a minute ahead, and a forced
+shutdown of the sandbox at the end.
+
+```bat
+powershell -File tests\sandbox\Run-Sandbox.ps1                     :: 60 checks, ~11 min
+powershell -File tests\sandbox\Run-Sandbox.ps1 -Suite msix         :: Store package, ~1 min
+powershell -File tests\sandbox\Run-Sandbox.ps1 -Suite screenshots  :: README screenshots
+```
+
+`docs/design.html` is the design the app implements (open it in a browser).
+
 ### Under the hood
 
 - Sleep / Hibernate use `SetSuspendState`; Shut down / Restart / Sign
@@ -266,6 +282,11 @@ The generated files are committed, so builds don't need Edge.
   shutdown reason (`EWX_FORCE` with Force on, `EWX_FORCEIFHUNG` off).
 - Idle is measured with `GetLastInputInfo`.
 - Only one copy runs: launching again brings up the running one.
+
+## License
+
+[GPL-3.0](LICENSE): free to use, study, change and share. If you distribute a
+modified version, you must publish its source under the same license.
 
 ---
 
