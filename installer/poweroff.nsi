@@ -1,6 +1,8 @@
 ; PowerOff installer (NSIS 3). Per-user install, no admin rights needed.
 ;   makensis /DVERSION=1.0.0 installer\poweroff.nsi   ->  PowerOff-setup.exe
 Unicode true
+!define MUI_ICON "..\poweroff.ico"
+!define MUI_UNICON "..\poweroff.ico"
 SetCompressor /SOLID lzma
 RequestExecutionLevel user
 
@@ -69,6 +71,8 @@ Section "Uninstall"
   nsExec::Exec 'schtasks /delete /tn "PowerOff" /f'
   Pop $0
   nsExec::Exec 'schtasks /delete /tn "PowerOff daily" /f'
+  Pop $0
+  nsExec::Exec 'schtasks /delete /tn "PowerOff wake" /f'
   Pop $0
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "PowerOff"
 

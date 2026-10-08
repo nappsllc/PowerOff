@@ -1,5 +1,7 @@
 @echo off
-rem Build PowerOff (C version) with MSVC. Produces poweroff.exe (~tens of KB).
+rem Build PowerOff (C version) with MSVC. Produces poweroff.exe (~160 KB).
+rem /MT + ucrt.lib: the VC runtime is linked in (no VC++ Redistributable needed), the
+rem Universal CRT comes from Windows 10/11 itself.
 rem Uses the current MSVC environment if cl.exe is on PATH (e.g. CI), else finds VS via vswhere.
 setlocal
 cd /d "%~dp0"
@@ -10,7 +12,9 @@ if errorlevel 1 (
 if defined VSDIR call "%VSDIR%\VC\Auxiliary\Build\vcvars64.bat" >nul
 where cl >nul 2>nul
 if errorlevel 1 (echo cl.exe not found: install Visual Studio Build Tools with the C++ workload & exit /b 1)
-cl /nologo /O1 /Os /GL /Gy /MD /DNDEBUG /W3 poweroff.c /link /OPT:REF /OPT:ICF /INCREMENTAL:NO /FILEALIGN:512 /SUBSYSTEM:WINDOWS /ENTRY:wmainCRTStartup /MANIFEST:NO /DELAYLOAD:comctl32.dll /DELAYLOAD:uxtheme.dll /DELAYLOAD:dwmapi.dll /DELAYLOAD:shell32.dll /DELAYLOAD:powrprof.dll delayimp.lib /OUT:poweroff.exe
+rc /nologo poweroff.rc
+if errorlevel 1 exit /b 1
+cl /nologo /O1 /Os /GL /Gy /MT /DNDEBUG /W3 poweroff.c poweroff.res /link /OPT:REF /OPT:ICF /INCREMENTAL:NO /FILEALIGN:512 /SUBSYSTEM:WINDOWS /ENTRY:wmainCRTStartup /MANIFEST:NO /DELAYLOAD:comctl32.dll /DELAYLOAD:uxtheme.dll /DELAYLOAD:dwmapi.dll /DELAYLOAD:shell32.dll /DELAYLOAD:powrprof.dll /DELAYLOAD:windowscodecs.dll /DELAYLOAD:msimg32.dll /DELAYLOAD:ole32.dll /DELAYLOAD:oleacc.dll /DELAYLOAD:oleaut32.dll delayimp.lib /NODEFAULTLIB:libucrt.lib ucrt.lib /OUT:poweroff.exe
 if errorlevel 1 exit /b 1
 mt.exe -nologo -manifest poweroff.exe.manifest -outputresource:poweroff.exe
 if errorlevel 1 exit /b 1
