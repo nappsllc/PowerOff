@@ -462,7 +462,7 @@ static LRESULT CALLBACK wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         int id = (int)di->CtlID;
         bool pressed = (di->itemState & ODS_SELECTED) != 0;
         /* focus ring only when focus came from the keyboard */
-        g_focus_cues = (di->itemState & ODS_FOCUS) && !(di->itemState & ODS_NOFOCUSRECT);
+        g_focus_cues = (di->itemState & ODS_FOCUS) && G.kbd_nav;
         if (id == ID_COMBO_ACTION || id == ID_COMBO_MODE || id == ID_COMBO_CD || id == ID_COMBO_IDLE)
             paint_combo_btn(di->hDC, di->hwndItem);
         else if (id == ID_TIME) {
@@ -792,6 +792,16 @@ static void run_gui(bool tray) {
     while (GetMessageW(&msg, NULL, 0, 0) > 0) {
         /* dialog-style keyboard navigation for the main window: Tab / Shift+Tab move
          * between controls, Space / Enter press them */
+        /* focus ring only while navigating by keyboard: a key shows it, a click hides it
+         * (Windows' own cue stays on for good after the first key press) */
+        bool key = msg.message == WM_KEYDOWN || msg.message == WM_SYSKEYDOWN;
+        bool click = msg.message == WM_LBUTTONDOWN || msg.message == WM_RBUTTONDOWN ||
+                     msg.message == WM_NCLBUTTONDOWN;
+        if ((key && !G.kbd_nav) || (click && G.kbd_nav)) {
+            G.kbd_nav = key;
+            HWND f = GetFocus();
+            if (f && G.main && IsChild(G.main, f)) InvalidateRect(f, NULL, FALSE);
+        }
         if (G.main && IsDialogMessageW(G.main, &msg)) continue;
         TranslateMessage(&msg);
         DispatchMessageW(&msg);

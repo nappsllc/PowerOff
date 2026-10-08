@@ -12,6 +12,7 @@
 #define WTS_NAME L"PowerOff"
 #define WTS_WAKE L"PowerOff wake"
 #define WTS_DAILY L"PowerOff daily" /* --install-daily */
+#define WTS_STARTUP L"PowerOff startup" /* Start with Windows, Store build */
 
 static void iso_local(long long secs, wchar_t *out, size_t n) {
     int y; unsigned mo, d;
@@ -136,7 +137,7 @@ static bool ts_read(const wchar_t *name, TaskInfo *ti) {
 static bool wts_create(const wchar_t *name, const wchar_t *trig, const wchar_t *extra,
                        const wchar_t *args) {
     wchar_t exe[MAX_PATH], exe_x[MAX_PATH * 2], now[32];
-    GetModuleFileNameW(NULL, exe, MAX_PATH);
+    app_exe(exe, MAX_PATH);
     xml_escape(exe, exe_x, MAX_PATH * 2);
     iso_local(local_now_secs(), now, 32);
     static wchar_t xml[4096];
@@ -151,10 +152,11 @@ static bool wts_create(const wchar_t *name, const wchar_t *trig, const wchar_t *
         L"<Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>"
         L"<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>"
         L"<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>"
-        L"<ExecutionTimeLimit>PT1H</ExecutionTimeLimit>%ls</Settings>"
+        L"%ls%ls</Settings>"
         L"<Actions Context=\"Author\"><Exec><Command>%ls</Command>"
         L"<Arguments>%ls</Arguments></Exec></Actions></Task>",
-        now, trig, extra, exe_x, args);
+        now, trig, wcsstr(extra, L"ExecutionTimeLimit") ? L"" : L"<ExecutionTimeLimit>PT1H</ExecutionTimeLimit>",
+        extra, exe_x, args);
     return ts_register(name, xml);
 }
 
@@ -188,7 +190,7 @@ static bool wts_register(const Runtime *r) {
     const Plan *p = &r->plan;
     long long now = local_now_secs();
     long long warn = p->remind_min > 0 ? p->remind_min * 60LL : 0;
-    wchar_t trig[640], start[32], end[32], extra[96] = L"";
+    wchar_t trig[640], start[32], end[32], extra[96] = L"", at_arg[16] = L"";
 
     if (p->mode == M_DAILY || p->mode == M_WEEKLY) {
         int days = p->mode == M_DAILY ? 0x7F : p->days;
@@ -213,6 +215,25 @@ static bool wts_register(const Runtime *r) {
                 L"<ScheduleByWeek><DaysOfWeek>%ls</DaysOfWeek><WeeksInterval>1</WeeksInterval>"
                 L"</ScheduleByWeek></CalendarTrigger>", start, dl);
         }
+        /* The next time is closer than the reminder lead (just picked, a minute ahead):
+         * the calendar trigger's start for it has passed, so Windows would wait a day.
+         * A one-off trigger starts the reminder now; --at counts it down to the time. */
+        int pd = p->mode == M_DAILY ? 0x7F : p->days;
+        long long next_at = 0;
+        for (int d = 0; d < 2 && !next_at; d++) {
+            long long at = now / 86400 * 86400 + d * 86400LL + p->h * 3600LL + p->m * 60LL;
+            int wd = (int)((at / 86400 + 3) % 7); /* 1970-01-01 was a Thursday; Monday = 0 */
+            if (at > now && ((pd >> wd) & 1)) next_at = at;
+        }
+        if (warn && next_at && next_at - warn <= now + 2) {
+            wchar_t s2[32], e2[32], t2[200];
+            iso_local(now + 3, s2, 32);
+            iso_local(next_at + 600, e2, 32);
+            StringCchPrintfW(t2, 200, L"<TimeTrigger><StartBoundary>%ls</StartBoundary>"
+                L"<EndBoundary>%ls</EndBoundary></TimeTrigger>", s2, e2);
+            StringCchCatW(trig, 640, t2);
+        }
+        StringCchPrintfW(at_arg, 16, L" --at %02d:%02d", p->h, p->m);
     } else if (p->mode == M_COUNTDOWN || p->mode == M_ONCE) {
         long long at = r->fire_at + r->delay;
         if (warn > at - now - 15) warn = 0; /* no room for a reminder: just run at the time */
@@ -226,9 +247,9 @@ static bool wts_register(const Runtime *r) {
         return false;
     }
 
-    wchar_t args[96];
-    StringCchPrintfW(args, 96, L"--task %ls --fire-now --warn-secs %lld%ls",
-        TASK_CLI[p->task], warn, p->force ? L" --force" : L"");
+    wchar_t args[112];
+    StringCchPrintfW(args, 112, L"--task %ls --fire-now --warn-secs %lld%ls%ls",
+        TASK_CLI[p->task], warn, at_arg, p->force ? L" --force" : L"");
     return wts_create(WTS_NAME, trig, extra, args);
 }
 
@@ -262,7 +283,7 @@ static bool ts_load_plan(Runtime *r) {
 
     r->delay = 0;
     r->reminded = true; /* the task's own --fire-now process shows the reminder */
-    if (wcsstr(x, L"<TimeTrigger>")) { /* one-shot countdown */
+    if (wcsstr(x, L"<TimeTrigger>") && !wcsstr(x, L"<CalendarTrigger>")) { /* one-shot countdown */
         long long at = start + warn, created = parse_iso(dt);
         if (at <= now - 5 && !ti.next_run && ti.state != TASK_STATE_RUNNING) return false; /* already ran */
         p->mode = M_COUNTDOWN;
@@ -296,4 +317,54 @@ static bool ts_load_plan(Runtime *r) {
     }
     r->active = true;
     return true;
+}
+
+/* ------------------------------------------------------------------ Start with Windows
+ * The HKCU Run value; in the Store build a package's registry writes are private, so a
+ * Run value would never run: a logon task starts the tray instead. */
+
+static void set_startup(bool on) {
+    if (packaged()) {
+        if (!on) { ts_delete(WTS_STARTUP); return; }
+        wchar_t dom[128] = L"", usr[128] = L"", who[260], who_x[520], trig[640];
+        GetEnvironmentVariableW(L"USERDOMAIN", dom, 128);
+        GetEnvironmentVariableW(L"USERNAME", usr, 128);
+        StringCchPrintfW(who, 260, L"%ls\\%ls", dom, usr);
+        xml_escape(who, who_x, 520);
+        StringCchPrintfW(trig, 640, L"<LogonTrigger><UserId>%ls</UserId></LogonTrigger>", who_x);
+        wts_create(WTS_STARTUP, trig, L"<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>", L"--tray");
+        return;
+    }
+    HKEY hk;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER,
+            L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+            0, KEY_SET_VALUE | KEY_QUERY_VALUE, &hk) == ERROR_SUCCESS) {
+        if (on) {
+            wchar_t exe[MAX_PATH], cmd[MAX_PATH + 16];
+            GetModuleFileNameW(NULL, exe, MAX_PATH);
+            StringCchPrintfW(cmd, MAX_PATH + 16, L"\"%s\" --tray", exe);
+            RegSetValueExW(hk, L"PowerOff", 0, REG_SZ,
+                (const BYTE *)cmd, (DWORD)((wcslen(cmd) + 1) * sizeof(wchar_t)));
+        } else {
+            RegDeleteValueW(hk, L"PowerOff");
+        }
+        RegCloseKey(hk);
+    }
+}
+
+static bool get_startup(void) {
+    if (packaged()) {
+        TaskInfo ti;
+        return ts_read(WTS_STARTUP, &ti);
+    }
+    HKEY hk;
+    bool ok = false;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER,
+            L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+            0, KEY_QUERY_VALUE, &hk) == ERROR_SUCCESS) {
+        DWORD type = 0, cb = 0;
+        ok = RegQueryValueExW(hk, L"PowerOff", NULL, &type, NULL, &cb) == ERROR_SUCCESS;
+        RegCloseKey(hk);
+    }
+    return ok;
 }

@@ -7,7 +7,7 @@
  * press, Esc closes. Geometry in design pixels, scaled with S(). */
 
 #define ABOUT_CLASS L"PowerOffAbout"
-#define APP_VERSION L"1.0.0"
+#define APP_VERSION L"1.0.1"
 #define RELEASES_URL L"https://github.com/nappsllc/PowerOff/releases/latest"
 #define CONTACT_URL L"mailto:hi@powernapps.net?subject=PowerNapps%20PowerOff"
 #define SITE_URL L"https://powernapps.net"
@@ -61,6 +61,13 @@ static int about_hit(int x, int y) {
 
 static void about_press(int i) {
     static const wchar_t *URL[] = { NULL, CONTACT_URL, SITE_URL, RELEASES_URL };
+    wchar_t pfn[128], store[192];
+    UINT32 n = 128;
+    if (i == AB_UPDATES && packaged() && GetCurrentPackageFamilyName(&n, pfn) == ERROR_SUCCESS) {
+        StringCchPrintfW(store, 192, L"ms-windows-store://pdp/?PFN=%ls", pfn); /* the Store updates it */
+        ShellExecuteW(NULL, L"open", store, NULL, NULL, SW_SHOWNORMAL);
+        return;
+    }
     if (i == AB_OK) about_close();
     else if (i) ShellExecuteW(NULL, L"open", URL[i], NULL, NULL, SW_SHOWNORMAL);
 }

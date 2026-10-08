@@ -111,6 +111,7 @@ typedef struct {
     const RECT *hover_row;   /* Options row under the mouse (incl. over its toggle) */
     bool inactive;           /* window not active: dimmed caption */
     HWND last_focus;         /* focused control while inactive, restored on activation */
+    bool kbd_nav;            /* last input was a key: show the focus ring (a click hides it) */
     bool wake_on, wake_dirty; /* daily wake task; dirty = time edited, not yet re-registered */
     int wake_h, wake_m;
     bool delegated;   /* the active schedule is the "PowerOff" task: Windows runs it, we display it */
@@ -524,34 +525,20 @@ static void load_config(Plan *p) {
     p->force = GetPrivateProfileIntW(L"PowerOff", L"force", 0, path) != 0;
 }
 
-static void set_startup(bool on) {
-    HKEY hk;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER,
-            L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-            0, KEY_SET_VALUE | KEY_QUERY_VALUE, &hk) == ERROR_SUCCESS) {
-        if (on) {
-            wchar_t exe[MAX_PATH], cmd[MAX_PATH + 16];
-            GetModuleFileNameW(NULL, exe, MAX_PATH);
-            StringCchPrintfW(cmd, MAX_PATH + 16, L"\"%s\" --tray", exe);
-            RegSetValueExW(hk, L"PowerOff", 0, REG_SZ,
-                (const BYTE *)cmd, (DWORD)((wcslen(cmd) + 1) * sizeof(wchar_t)));
-        } else {
-            RegDeleteValueW(hk, L"PowerOff");
-        }
-        RegCloseKey(hk);
+/* Store (MSIX) build: running from a package changes how Windows can start us */
+static bool packaged(void) {
+    static int p = -1;
+    if (p < 0) {
+        UINT32 n = 0;
+        p = GetCurrentPackageFullName(&n, NULL) != APPMODEL_ERROR_NO_PACKAGE;
     }
+    return p != 0;
 }
 
-static bool get_startup(void) {
-    HKEY hk;
-    bool ok = false;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER,
-            L"Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-            0, KEY_QUERY_VALUE, &hk) == ERROR_SUCCESS) {
-        DWORD type = 0, cb = 0;
-        ok = RegQueryValueExW(hk, L"PowerOff", NULL, &type, NULL, &cb) == ERROR_SUCCESS;
-        RegCloseKey(hk);
-    }
-    return ok;
+/* The path Windows should launch: in a package, its app execution alias (Task Scheduler
+ * can't start an exe inside WindowsApps directly); otherwise this exe. */
+static void app_exe(wchar_t *exe, DWORD n) {
+    if (!packaged() || !ExpandEnvironmentStringsW(L"%LOCALAPPDATA%\\Microsoft\\WindowsApps\\poweroff.exe", exe, n))
+        GetModuleFileNameW(NULL, exe, n);
 }
 

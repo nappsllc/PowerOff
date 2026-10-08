@@ -39,12 +39,28 @@ jobs:
           & $nsis /V2 /DVERSION=$version installer\poweroff.nsi
           if ($LASTEXITCODE) { exit 1 }
 
+      - name: Build Store package (MSIX)
+        shell: pwsh
+        # identity from Partner Center, set as repository variables; placeholders otherwise
+        env:
+          MSIX_NAME: ${{ vars.MSIX_NAME }}
+          MSIX_PUBLISHER: ${{ vars.MSIX_PUBLISHER }}
+          MSIX_PUBLISHER_NAME: ${{ vars.MSIX_PUBLISHER_NAME }}
+        run: |
+          $a = @{}
+          if ($env:MSIX_NAME) { $a.Name = $env:MSIX_NAME }
+          if ($env:MSIX_PUBLISHER) { $a.Publisher = $env:MSIX_PUBLISHER }
+          if ($env:MSIX_PUBLISHER_NAME) { $a.PublisherDisplayName = $env:MSIX_PUBLISHER_NAME }
+          if ($env:GITHUB_REF_TYPE -eq 'tag') { $a.Version = $env:GITHUB_REF_NAME.TrimStart('v') + '.0' }
+          & ./tools/make-msix.ps1 @a
+
       - uses: actions/upload-artifact@v4
         with:
           name: PowerOff
           path: |
             poweroff.exe
             PowerOff-setup.exe
+            PowerOff.msix
 
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -53,3 +69,4 @@ jobs:
           files: |
             poweroff.exe
             PowerOff-setup.exe
+            PowerOff.msix

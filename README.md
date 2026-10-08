@@ -4,9 +4,20 @@
 like it shipped with Windows 11, weighs ~160 KB and, once you close it,
 uses no memory at all.**
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
+  <img src="docs/screenshot-light.png" width="656" alt="PowerNapps PowerOff: Sleep at 11:00 PM every day, scheduled, with Wake up at 7:00 AM">
+</picture>
+
 - 🪶 **The only power-off app that eats 0 MB of RAM** (with Tray icon
   Off) — because it doesn't have to ;) Windows Task Scheduler does the
   job; PowerOff is just the remote control you open once a month.
+  Keep the tray icon and it's **0.1 MB**; even with the window open it's
+  only **2.3 MB** (Task Manager, Memory).
+- 🌅 **Wakes your PC on a timer — neat.** Most shutdown tools can only
+  put a PC to sleep. PowerOff also wakes it: sleep at 11 PM, and have it
+  up and ready at 7:00 the next morning, every day, using the same wake
+  timers Windows Update uses.
 - ⚡ **Highly optimized, tiny, zero dependencies.** One ~160 KB exe in
   plain C. No .NET, no Electron, no VC++ Redistributable, no runtime.
   Wise Auto Shutdown ships ~3.17 MB for the same job.
@@ -53,7 +64,10 @@ minutes.
 - **Tray icon** — keep a tiny tray icon after closing, or leave nothing
   running at all (see below).
 - **Wake up** — wake the PC from sleep or hibernate every day at a set
-  time (shown for Sleep and Hibernate, where it applies).
+  time, and turn the display on (an unattended timer wake leaves it off).
+  Shown for Sleep and Hibernate, where it applies; a shut-down PC can't
+  be woken by a timer. Needs *Allow wake timers* on in the power plan
+  (it is by default when plugged in).
 
 ### The window
 
@@ -88,16 +102,18 @@ PowerOff doesn't run your schedule. **Windows does.**
   performs the action. It runs on battery too, and one-shot tasks clean
   themselves up afterwards.
 - **Wake up** is a second task, `PowerOff wake`, with *Wake the computer
-  to run this task* set.
+  to run this task* set: Windows arms a hardware wake timer, so the PC
+  wakes from sleep or hibernate on its own, with nothing running.
 - Idle is the one trigger Task Scheduler can't express, so it runs
   in-process while the app or tray icon is alive.
 
-So after you close the window:
+Memory, as Task Manager shows it:
 
-| Tray icon | What's left running | Memory |
+| State | What's running | Memory |
 |---|---|---|
-| **Off** | nothing — the process exits | **0 MB** |
-| On | a fresh tray-only process that maps only what one icon needs | ~1.6 MB private |
+| Window closed, **Tray icon Off** | nothing — the process exits | **0 MB** |
+| Window closed, Tray icon On | a fresh tray-only process that maps only what one icon needs | **0.1 MB** |
+| Window open | the full UI | **2.3 MB** |
 
 ---
 
@@ -143,6 +159,22 @@ Uninstall from Settings > Apps. That also removes PowerOff's scheduled
 tasks (`PowerOff`, `PowerOff wake`, `PowerOff daily`), its startup entry
 and its settings (`%APPDATA%\PowerOff\`).
 
+### Microsoft Store
+
+`PowerOff.msix` is the same app packaged for the Store (built by CI next to
+the installer). Inside a package Windows changes two things, and PowerOff
+adapts when it detects one:
+
+- Task Scheduler can't start an exe inside the protected `WindowsApps`
+  folder, so the package declares a `poweroff.exe` app execution alias and
+  every task PowerOff creates runs that alias.
+- A package's registry writes are private, so **Start with Windows** is a
+  `PowerOff startup` task that runs at sign-in instead of a Run value.
+- **Check for updates** opens the app's Store page (the Store updates it).
+
+Windows removes a Store app without running any of its code, so tasks
+left scheduled at uninstall stay in Task Scheduler (they just stop working).
+
 ## Command line
 
 ```bat
@@ -181,12 +213,24 @@ installer:
 ```bat
 build.bat                                         :: -> poweroff.exe
 makensis /DVERSION=1.0.0 installer\poweroff.nsi   :: -> PowerOff-setup.exe
+powershell -File tools\make-msix.ps1 -Name <identity> -Publisher "CN=<...>" -PublisherDisplayName <name>
+                                                  :: -> PowerOff.msix (Microsoft Store)
 ```
 
 `build.bat` uses the current MSVC environment when `cl.exe` is on PATH,
 otherwise finds Visual Studio with `vswhere`. CI
-(`.github/workflows/build.yml`) builds both on every push and pull
+(`.github/workflows/build.yml`) builds all three on every push and pull
 request; pushing a `v*` tag publishes a GitHub release.
+
+**Store submission:** reserve the app name in Partner Center, copy the
+package identity (Name, Publisher, PublisherDisplayName from Product
+management > Product identity) into the repository variables
+`MSIX_NAME`, `MSIX_PUBLISHER` and `MSIX_PUBLISHER_NAME` (or pass them to
+`make-msix.ps1`), and upload `PowerOff.msix`. It's unsigned: the Store
+signs it. The package declares `runFullTrust` (a desktop app), which the
+submission asks you to justify: "Schedules shutdown, restart and sleep with
+Windows Task Scheduler." Tile and taskbar images are generated from
+`poweroff.ico` into `assets/msix/` (committed).
 
 ### Source layout
 

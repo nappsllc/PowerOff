@@ -17,6 +17,7 @@
 #include <shellapi.h>
 #include <powrprof.h>
 #include <dwmapi.h>
+#include <appmodel.h>  /* GetCurrentPackageFullName: Store (MSIX) build detection */
 #include <stdio.h>
 #include <wchar.h>
 #include <stdlib.h>

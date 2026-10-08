@@ -105,7 +105,7 @@ static void warn_then_fire(Task task, unsigned warn_secs, bool force) {
 
 static void print_help(void) {
     wprintf(
-        L"PowerOff 1.0 \x2014 tiny auto shutdown (native Win32, C)\n"
+        L"PowerOff " APP_VERSION L" \x2014 tiny auto shutdown (native Win32, C)\n"
         L"\n"
         L"GUI (no args, defaults to Sleep / at 11:00 PM):\n"
         L"  PowerOff.exe [--tray] [--dark|--light]\n"
@@ -282,9 +282,16 @@ int wmain(int argc, wchar_t **argv) {
             fwprintf(stderr, L"PowerOff: --fire-now needs --task <name>\n");
             return 2;
         }
-        const wchar_t *w = arg_val(argc, argv, L"--warn-secs");
-        warn_then_fire(task_opt, w ? (unsigned)wcstoul(w, NULL, 10) : 0,
-            has_flag(argc, argv, L"--force"));
+        const wchar_t *w = arg_val(argc, argv, L"--warn-secs"), *at = arg_val(argc, argv, L"--at");
+        unsigned warn = w ? (unsigned)wcstoul(w, NULL, 10) : 0;
+        int h, m;
+        if (warn && at && swscanf_s(at, L"%d:%d", &h, &m) == 2) {
+            /* count down to the time itself: started by the catch-up trigger, or late */
+            long long t = ((h * 3600LL + m * 60LL - local_now_secs() % 86400) % 86400 + 86400) % 86400;
+            if (t <= warn + 30) warn = (unsigned)t;
+            else if (t > 86400 - 300) warn = 0; /* just past it: act now */
+        }
+        warn_then_fire(task_opt, warn, has_flag(argc, argv, L"--force"));
         return 0;
     }
 
